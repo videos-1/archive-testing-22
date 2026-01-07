@@ -104,8 +104,8 @@ select, input{
 }
 
 .meta.description {
-  white-space: pre-wrap;   /* keeps line breaks */
-  word-break: break-word; /* prevents overflow */
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .open-btn{
@@ -122,26 +122,39 @@ select, input{
 }
 
 /* fullscreen viewer */
-.overlay{
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+}
+
+.fullscreen-overlay iframe{
+  width:100vw;
+  height:100vh;
+  border:0;
+}
+
+.close-btn{
   position:fixed;
-  inset:0;
-  background:black;
-  display:none;
-  z-index:9999;
-}
-
-.overlay iframe{
-  width:100%;
-  height:100%;
+  top:15px;
+  right:15px;
+  z-index:1000000;
+  background:rgba(255, 255, 255, 0.2);
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  font-size:16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
   border:none;
-}
-
-.close{
-  position:absolute;
-  top:10px;
-  right:10px;
-  z-index:10000;
-  background:#dc2626;
+  color:white;
 }
 
 .search-container{
@@ -268,11 +281,6 @@ select, input{
 <div class="grid" id="grid"></div>
 <button id="loadMoreBtn" class="load-more" style="display: none;" onclick="renderNextBatch()">Load More</button>
 
-<div class="overlay" id="overlay">
-  <button class="close" onclick="closeViewer()">✕ Close</button>
-  <iframe id="viewer"></iframe>
-</div>
-
 <div class="avatar-overlay" id="avatarOverlay">
   <button class="close-btn" onclick="closeAvatar()">✕</button>
   <img id="avatarFullscreen" src="" alt="Full Avatar">
@@ -281,8 +289,6 @@ select, input{
 <script>
 const logBox = document.getElementById("log");
 const grid = document.getElementById("grid");
-const overlay = document.getElementById("overlay");
-const viewer = document.getElementById("viewer");
 const searchInput = document.getElementById("searchInput");
 const searchType = document.getElementById("searchType");
 const mediaTypeFilter = document.getElementById("mediaTypeFilter");
@@ -316,7 +322,7 @@ const previewObserver = new IntersectionObserver(
     });
   },
   {
-    rootMargin: "200px", // preload slightly before visible
+    rootMargin: "200px",
     threshold: 0.1
   }
 );
@@ -332,14 +338,41 @@ function log(msg){
   logBox.scrollTop=logBox.scrollHeight;
 }
 
-function openViewer(url){
-  viewer.src=url;
-  overlay.style.display="block";
+function openViewer(embedUrl) {
+  document.body.style.overflow = "hidden";
+
+  const overlay = document.createElement("div");
+  overlay.className = "fullscreen-overlay";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "close-btn";
+  closeBtn.innerHTML = "✕";
+  closeBtn.onclick = () => {
+    document.body.style.overflow = "";
+    document.body.removeChild(overlay);
+  };
+
+  const embedContainer = document.createElement("div");
+  embedContainer.className = "embed-container";
+  embedContainer.innerHTML = `
+    <iframe
+      src="${embedUrl}"
+      allowfullscreen
+      style="width:100vw;height:100vh;border:0"
+    ></iframe>
+  `;
+
+  overlay.appendChild(closeBtn);
+  overlay.appendChild(embedContainer);
+  document.body.appendChild(overlay);
 }
 
 function closeViewer(){
-  viewer.src="";
-  overlay.style.display="none";
+  document.body.style.overflow = "";
+  const overlay = document.querySelector(".fullscreen-overlay");
+  if (overlay) {
+    document.body.removeChild(overlay);
+  }
 }
 
 function openAvatar() {
@@ -351,13 +384,13 @@ function closeAvatar() {
   avatarOverlay.style.display = "none";
 }
 
-function shareItem(identifier) {
-  const shareUrl = `Take a look at this VERSE https://yan-1-related-1.github.io/yan-1-website-shared-links-redirecting/archive-identifier-page-shared-links-redirecting.html?identifier=${identifier}`;
+function shareItem(username, identifier) {
+  const shareUrl = `https://yan-1-related-1.github.io/yan-1-website-shared-links-redirecting/archive-identifier-page-shared-links-redirecting.html?username=${username}&identifier=${identifier}`;
   
   if (navigator.share) {
     navigator.share({
       title: 'Check out this item',
-      text: shareUrl
+      url: shareUrl
     }).catch(error => {
       log(`❌ Sharing failed: ${error}`);
     });
@@ -373,69 +406,74 @@ function shareItem(identifier) {
 function normalizeDescription(desc) {
   if (!desc) return "";
 
-  // Join array descriptions safely
   if (Array.isArray(desc)) {
     desc = desc.join("\n\n");
   }
 
-  // Convert to string
   desc = desc.toString();
-
-  // Decode HTML entities
   const textarea = document.createElement("textarea");
   textarea.innerHTML = desc;
   desc = textarea.value;
-
-  // Remove HTML tags completely
   desc = desc.replace(/<\/?[^>]+(>|$)/g, "");
-
-  // Normalize line breaks
   desc = desc.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
   return desc.trim();
 }
 
-function processDoc(doc){
-  return {
+function processDoc(doc, username){
+  const item = {
     identifier: doc.identifier,
     title: doc.title || doc.identifier,
     creator: doc.creator || "Unknown",
-    uploader: doc.uploader || "Unknown",
     date: doc.publicdate || "N/A",
     desc: normalizeDescription(doc.description),
     tags: (doc.subject || []).toString(),
     mediaType: doc.mediatype || "unknown",
     embedUrl: `https://archive.org/embed/${doc.identifier}`,
-    reviewUrl: `https://archive.org/details/${doc.identifier}#reviews`
+    reviewUrl: `https://archive.org/details/${doc.identifier}#reviews`,
+    username: username
   };
+
+  // Add optional fields if they exist
+  if (doc.gmail) item.gmail = doc.gmail;
+  if (doc.link1) item.link1 = doc.link1;
+  if (doc.link2) item.link2 = doc.link2;
+  if (doc.link3) item.link3 = doc.link3;
+  if (doc.phone_number) item.phone_number = doc.phone_number;
+
+  return item;
 }
 
 function createCard(item) {
-  const card=document.createElement("div");
-  card.className="card";
-  card.innerHTML=`
+  let metaHtml = `
     <h3>${item.title}</h3>
-
     <div class="preview lazy-preview" data-embed="${item.embedUrl}">
       <span style="color:#94a3b8;font-size:0.85rem;">Loading preview…</span>
     </div>
-
     <div class="meta"><b>Identifier:</b> ${item.identifier}</div>
-    <div class="meta"><b>Uploader:</b> ${item.uploader}</div>
+    <div class="meta"><b>Creator:</b> ${item.creator}</div>
     <div class="meta"><b>Public Date:</b> ${item.date}</div>
     <div class="meta"><b>Media Type:</b> ${item.mediaType}</div>
     <div class="meta"><b>Tags:</b> ${item.tags}</div>
+  `;
+
+  // Add optional fields only if they exist
+  if (item.gmail) metaHtml += `<div class="meta"><b>Gmail:</b> ${item.gmail}</div>`;
+  if (item.link1) metaHtml += `<div class="meta"><b>Link 1:</b> <a href="${item.link1}" target="_blank" style="color:#60a5fa;">${item.link1}</a></div>`;
+  if (item.link2) metaHtml += `<div class="meta"><b>Link 2:</b> <a href="${item.link2}" target="_blank" style="color:#60a5fa;">${item.link2}</a></div>`;
+  if (item.link3) metaHtml += `<div class="meta"><b>Link 3:</b> <a href="${item.link3}" target="_blank" style="color:#60a5fa;">${item.link3}</a></div>`;
+  if (item.phone_number) metaHtml += `<div class="meta"><b>Phone:</b> ${item.phone_number}</div>`;
+
+  metaHtml += `
     <div class="meta description">
       <b>Description:</b><br>
       ${item.desc}
     </div>
-
     <div class="meta">
       <a href="${item.reviewUrl}" target="_blank" style="color:#60a5fa;">Reviews</a>
     </div>
-
     <div style="display: flex; gap: 0.5rem;">
-      <button class="share-btn" onclick="shareItem('${item.identifier}')">
+      <button class="share-btn" onclick="shareItem('${item.username}', '${item.identifier}')">
         ᯓ➤ Share
       </button>
       <button class="open-btn" onclick="openViewer('${item.embedUrl}')">
@@ -443,6 +481,10 @@ function createCard(item) {
       </button>
     </div>
   `;
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = metaHtml;
   return card;
 }
 
@@ -477,12 +519,10 @@ async function fetchAllItems(){
     return;
   }
 
-  // Clear grid and items at start
   grid.innerHTML = "";
   allItems = [];
   pageIndex = 0;
 
-  // Set profile avatar
   if (avatarSrc) {
     profileAvatar.src = avatarSrc;
     profileAvatar.onclick = openAvatar;
@@ -495,10 +535,9 @@ async function fetchAllItems(){
     return;
   }
 
-  // Set creator name
   creatorName.textContent = username;
 
-  const rows = 100; // Reduced from 1000
+  const rows = 100;
   let page=1, fetched=0, total=0;
 
   while(true){
@@ -506,8 +545,9 @@ async function fetchAllItems(){
 
     const searchUrl =
       `https://archive.org/advancedsearch.php?q=creator:@${username}` +
-      `&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=uploader&fl[]=publicdate` +
+      `&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=publicdate` +
       `&fl[]=mediatype&fl[]=description&fl[]=subject` +
+      `&fl[]=gmail&fl[]=link1&fl[]=link2&fl[]=link3&fl[]=phone_number` +
       `&sort[]=publicdate desc&rows=${rows}&page=${page}&output=json`;
 
     const res = await fetch(searchUrl);
@@ -521,8 +561,7 @@ async function fetchAllItems(){
     const docs = data.response.docs;
     if(!docs.length) break;
 
-    // Process docs directly without metadata calls
-    const items = docs.map(doc => processDoc(doc));
+    const items = docs.map(doc => processDoc(doc, username));
     allItems = allItems.concat(items);
     visibleItems = [...allItems];
 
@@ -531,7 +570,6 @@ async function fetchAllItems(){
     page++;
   }
 
-  // Render first batch
   renderNextBatch();
   loadMoreBtn.style.display = visibleItems.length > PAGE_SIZE ? 'block' : 'none';
   log(`✅ Done. Loaded ${fetched} items.`);
