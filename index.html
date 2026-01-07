@@ -203,23 +203,6 @@ button {
   cursor: pointer;
   font-size: 1rem;
 }
-
-.single-profile-view {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 2rem;
-  margin-bottom: 2rem;
-}
-
-.single-profile-view .avatar {
-  width: 128px;
-  height: 128px;
-}
 </style>
 </head>
 
@@ -229,23 +212,9 @@ button {
   <div class="header">
     <h2><span>👤</span> ProfileX</h2>
     <p>Explore. Know others. Express yourself.</p>
-    <div id="backButtonContainer"></div>
   </div>
-  
-  <div id="singleProfileView" class="single-profile-view" style="display: none;">
-    <img id="singleAvatar" class="avatar" src="" alt="Avatar">
-    <div id="singleUsername" class="username"></div>
-    <button onclick="showAllProfiles()">← Back to All Profiles</button>
-  </div>
-  
-  <div class="search-container">
-    <input type="text" id="searchInput" placeholder="Search by username">
-    <button onclick="performSearch()">Search</button>
-  </div>
-  <button class="back-btn" onclick="showAllProfiles()" style="margin: 0.5rem auto; display: none;" id="backToProfilesBtn">Back to Profiles</button>
   
   <div id="grid" class="grid"></div>
-  <button id="loadMoreBtn" class="load-more" style="display: none;" onclick="loadNextBatch()">Load More</button>
 </div>
 
 <!-- Fullscreen Avatar Viewer -->
@@ -258,60 +227,13 @@ button {
 const grid = document.getElementById("grid");
 const overlay = document.getElementById("overlay");
 const fullImage = document.getElementById("fullImage");
-const searchInput = document.getElementById("searchInput");
-const loadMoreBtn = document.getElementById("loadMoreBtn");
-const singleProfileView = document.getElementById("singleProfileView");
-const singleAvatar = document.getElementById("singleAvatar");
-const singleUsername = document.getElementById("singleUsername");
-const backToProfilesBtn = document.getElementById("backToProfilesBtn");
-const backButtonContainer = document.getElementById("backButtonContainer");
 
-let allProfiles = [];
-let currentProfiles = [];
-const PAGE_SIZE = 30;
-let currentPage = 0;
-
-// Check for username in URL parameters
-function getParameterByName(name) {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get(name);
-}
-
-// Handle external link with username
-function handleExternalLink() {
-  const username = getParameterByName('username');
-  if (username) {
-    displaySingleProfile(username);
-    return true;
-  }
-  return false;
-}
-
-function displaySingleProfile(username) {
-  const avatarSrc = `https://archive.org/services/img/@${username}`;
-  const avatarFallback = `https://archive.org/services/img/@${username}/uploads`;
-  
-  singleAvatar.src = avatarSrc;
-  singleAvatar.onerror = () => {
-    singleAvatar.src = avatarFallback;
-    singleAvatar.onerror = () => {
-      singleAvatar.src = "https://archive.org/images/glogo.png";
-    };
-  };
-  
-  singleUsername.textContent = username;
-  singleProfileView.style.display = "flex";
-  grid.style.display = "none";
-  loadMoreBtn.style.display = "none";
-  backToProfilesBtn.style.display = "block";
-}
-
-function shuffle(array){
-  for(let i=array.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [array[i],array[j]]=[array[j],array[i]];
-  }
-  return array;
+// Function to get URL parameters
+function getUrlParameter(name) {
+  name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+  var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+  var results = regex.exec(window.location.href);
+  return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
 }
 
 function openImage(src){
@@ -322,49 +244,6 @@ function openImage(src){
 function closeImage(){
   fullImage.src = "";
   overlay.style.display = "none";
-}
-
-function showAllProfiles() {
-  singleProfileView.style.display = "none";
-  grid.style.display = "grid";
-  backToProfilesBtn.style.display = "none";
-  
-  currentProfiles = [...allProfiles];
-  currentPage = 0;
-  grid.innerHTML = '';
-  loadNextBatch();
-  loadMoreBtn.style.display = currentProfiles.length > PAGE_SIZE ? 'block' : 'none';
-}
-
-function performSearch() {
-  const searchTerm = searchInput.value.toLowerCase();
-  if (!searchTerm) {
-    showAllProfiles();
-    return;
-  }
-  
-  currentProfiles = allProfiles.filter(profile => 
-    profile.username.toLowerCase().includes(searchTerm)
-  );
-  
-  currentPage = 0;
-  grid.innerHTML = '';
-  loadNextBatch();
-  loadMoreBtn.style.display = currentProfiles.length > PAGE_SIZE ? 'block' : 'none';
-}
-
-function loadNextBatch() {
-  const start = currentPage * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
-  const batch = currentProfiles.slice(start, end);
-  
-  renderProfiles(batch);
-  
-  currentPage++;
-  
-  if (end >= currentProfiles.length) {
-    loadMoreBtn.style.display = 'none';
-  }
 }
 
 function shareProfile(username) {
@@ -393,7 +272,7 @@ function renderProfiles(profiles) {
 
     const img = document.createElement("img");
     img.className = "avatar";
-    img.loading = "lazy";
+    img.loading = "lazy"; // Native lazy loading
     img.src = avatar1;
     img.onerror = () => {
       img.onerror = null;
@@ -440,44 +319,22 @@ function renderProfiles(profiles) {
   });
 }
 
-// Initialize the page
-function init() {
-  // Check if we're loading from an external link
-  if (handleExternalLink()) {
-    return;
-  }
-  
-  // Normal profile loading
-  const stored = localStorage.getItem("archive_profile_urls");
-  
-  if (stored) {
-    let urls = JSON.parse(stored);
-    urls = shuffle(urls);
-    
-    allProfiles = urls.map(url => {
-      const match = url.match(/@([^/]+)/);
-      const username = match ? match[1] : "unknown";
-      
-      const avatar1 = `https://archive.org/services/img/@${username}`;
-      const avatar2 = `https://archive.org/services/img/@${username}/uploads`;
-      const fallback = "https://archive.org/images/glogo.png";
-      
-      return { 
-        url, 
-        username, 
-        avatarSrc: avatar1,
-        avatar1,
-        avatar2,
-        fallback
-      };
-    });
-    
-    showAllProfiles();
-  }
-}
+// Check if username parameter exists in URL
+const usernameFromUrl = getUrlParameter('username');
 
-// Run initialization when page loads
-window.addEventListener('DOMContentLoaded', init);
+if (usernameFromUrl) {
+  // Display only the profile for the username from URL
+  const profile = {
+    url: `https://archive.org/details/@${usernameFromUrl}`,
+    username: usernameFromUrl,
+    avatarSrc: `https://archive.org/services/img/@${usernameFromUrl}`,
+    avatar1: `https://archive.org/services/img/@${usernameFromUrl}`,
+    avatar2: `https://archive.org/services/img/@${usernameFromUrl}/uploads`,
+    fallback: "https://archive.org/images/glogo.png"
+  };
+  
+  renderProfiles([profile]);
+}
 </script>
 
 </body>
