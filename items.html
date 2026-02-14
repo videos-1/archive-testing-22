@@ -91,10 +91,10 @@ select, input{
   background: #1e293b;
 }
 
-.preview iframe{
+.preview img{
   width:100%;
   height:100%;
-  border:none;
+  object-fit:cover;
 }
 
 .meta{
@@ -121,13 +121,6 @@ select, input{
   margin-right: 0.5rem;
 }
 
-.playlist-link {
-  cursor: pointer;
-  color: var(--accent);
-  font-size: 1.2rem;
-  margin-left: 0.5rem;
-}
-
 /* fullscreen viewer */
 .fullscreen-overlay {
   position: fixed;
@@ -151,7 +144,7 @@ select, input{
   top:15px;
   right:15px;
   z-index:1000000;
-  background:rgba(255, 255, 255, 0.2);
+  background:rgba(255, 0, 0, 0.8);
   width:30px;
   height:30px;
   border-radius:50%;
@@ -307,90 +300,28 @@ const loadMoreBtn = document.getElementById("loadMoreBtn");
 
 let allItems = [];
 let visibleItems = [];
-let playlistItems = []; // Store only items with playlists
 const PAGE_SIZE = 30;
 let pageIndex = 0;
 
-// IntersectionObserver for lazy loading previews
-const previewObserver = new IntersectionObserver(
+function getArchiveThumbnail(identifier) {
+  return `https://archive.org/services/img/${identifier}`;
+}
+
+// IntersectionObserver for lazy loading thumbnails
+const thumbnailObserver = new IntersectionObserver(
   (entries, observer) => {
     entries.forEach(entry => {
       if (!entry.isIntersecting) return;
 
       const container = entry.target;
-      const url = container.dataset.embed;
+      const thumbnailUrl = container.dataset.thumb;
 
       // Prevent re-loading
       if (container.dataset.loaded) return;
 
-      container.innerHTML = `<iframe src="${url}" loading="lazy"></iframe>`;
+      container.innerHTML = `<img src="${thumbnailUrl}" alt="Thumbnail" loading="lazy">`;
       container.dataset.loaded = "1";
 
-      observer.unobserve(container);
-    });
-  },
-  {
-    rootMargin: "200px",
-    threshold: 0.1
-  }
-);
-
-// New observer for lazy loading file counts
-const fileCountObserver = new IntersectionObserver(
-  (entries, observer) => {
-    entries.forEach(async entry => {
-      if (!entry.isIntersecting) return;
-
-      const container = entry.target;
-      const identifier = container.dataset.identifier;
-      const username = container.dataset.username;
-
-      if (container.dataset.loaded) return;
-
-      try {
-        const response = await fetch(`https://archive.org/metadata/${identifier}`);
-        const data = await response.json();
-        
-        if (data.files) {
-          // Show ᯤ ONLY if the user uploaded more than one REAL content file
-          const originalFiles = data.files.filter(f =>
-            f.source === "original" &&
-            f.name &&
-            // ❌ exclude archive system files
-            !f.name.endsWith('.xml') &&
-            !f.name.endsWith('.sqlite') &&
-            !f.name.endsWith('.txt') &&
-            !f.name.includes('_meta') &&
-            !f.name.includes('_files') &&
-            !f.name.includes('_reviews') &&
-            !f.name.includes('_thumb') &&
-            !f.name.includes('__ia_thumb') &&
-            !f.name.startsWith('.')
-          );
-
-          if (originalFiles.length > 1) {
-            const item = allItems.find(i => i.identifier === identifier);
-            if (item && !playlistItems.some(pi => pi.identifier === identifier)) {
-              playlistItems.push(item);
-            }
-
-            container.innerHTML =
-              `<span class="playlist-link"
-                onclick="openPlaylist('${username}', '${identifier}')">
-                ᯤ ${originalFiles.length}
-              </span>`;
-          } else {
-            container.innerHTML = '';
-          }
-        } else {
-          container.innerHTML = '';
-        }
-      } catch (error) {
-        console.error('Error fetching file metadata for', identifier, ':', error);
-        container.innerHTML = '';
-      }
-
-      container.dataset.loaded = "1";
       observer.unobserve(container);
     });
   },
@@ -411,7 +342,7 @@ function log(msg){
   logBox.scrollTop=logBox.scrollHeight;
 }
 
-function openViewer(embedUrl) {
+function openViewer(directUrl) {
   document.body.style.overflow = "hidden";
 
   const overlay = document.createElement("div");
@@ -420,23 +351,24 @@ function openViewer(embedUrl) {
   const closeBtn = document.createElement("button");
   closeBtn.className = "close-btn";
   closeBtn.innerHTML = "✕";
+  closeBtn.style.background = "rgba(255, 0, 0, 0.8)";
   closeBtn.onclick = () => {
     document.body.style.overflow = "";
     document.body.removeChild(overlay);
   };
 
-  const embedContainer = document.createElement("div");
-  embedContainer.className = "embed-container";
-  embedContainer.innerHTML = `
+  const iframeContainer = document.createElement("div");
+  iframeContainer.className = "embed-container";
+  iframeContainer.innerHTML = `
     <iframe
-      src="${embedUrl}"
+      src="${directUrl}"
       allowfullscreen
       style="width:100vw;height:100vh;border:0"
     ></iframe>
   `;
 
   overlay.appendChild(closeBtn);
-  overlay.appendChild(embedContainer);
+  overlay.appendChild(iframeContainer);
   document.body.appendChild(overlay);
 }
 
@@ -455,13 +387,6 @@ function openAvatar() {
 
 function closeAvatar() {
   avatarOverlay.style.display = "none";
-}
-
-function openPlaylist(username, identifier) {
-  // ✅ FIXED: SEND ONLY CLICKED IDENTIFIER
-  window.location.href =
-    `items_playlist.html?username=${encodeURIComponent(username)}
-     &identifier=${encodeURIComponent(identifier)}`;
 }
 
 function shareItem(username, identifier) {
@@ -509,17 +434,11 @@ function processDoc(doc, username){
     desc: normalizeDescription(doc.description),
     tags: (doc.subject || []).toString(),
     mediaType: doc.mediatype || "unknown",
-    embedUrl: `https://archive.org/embed/${doc.identifier}`,
+    directUrl: `https://archive.org/details/${doc.identifier}`,
     reviewUrl: `https://archive.org/details/${doc.identifier}#reviews`,
-    username: username
+    username: username,
+    thumbnailUrl: getArchiveThumbnail(doc.identifier)
   };
-
-  // Add optional fields if they exist
-  if (doc.gmail) item.gmail = doc.gmail;
-  if (doc.link1) item.link1 = doc.link1;
-  if (doc.link2) item.link2 = doc.link2;
-  if (doc.link3) item.link3 = doc.link3;
-  if (doc.phone_number) item.phone_number = doc.phone_number;
 
   return item;
 }
@@ -527,8 +446,8 @@ function processDoc(doc, username){
 function createCard(item) {
   let metaHtml = `
     <h3>${item.title}</h3>
-    <div class="preview lazy-preview" data-embed="${item.embedUrl}">
-      <span style="color:#94a3b8;font-size:0.85rem;">Loading preview…</span>
+    <div class="preview lazy-thumbnail" data-thumb="${item.thumbnailUrl}">
+      <span style="color:#94a3b8;font-size:0.85rem;">Loading thumbnail…</span>
     </div>
     <div class="meta"><b>Identifier:</b> ${item.identifier}</div>
     <div class="meta"><b>Creator:</b> ${item.creator}</div>
@@ -536,13 +455,6 @@ function createCard(item) {
     <div class="meta"><b>Media Type:</b> ${item.mediaType}</div>
     <div class="meta"><b>Tags:</b> ${item.tags}</div>
   `;
-
-  // Add optional fields only if they exist
-  if (item.gmail) metaHtml += `<div class="meta"><b>Gmail:</b> ${item.gmail}</div>`;
-  if (item.link1) metaHtml += `<div class="meta"><b>Link 1:</b> <a href="${item.link1}" target="_blank" style="color:#60a5fa;">${item.link1}</a></div>`;
-  if (item.link2) metaHtml += `<div class="meta"><b>Link 2:</b> <a href="${item.link2}" target="_blank" style="color:#60a5fa;">${item.link2}</a></div>`;
-  if (item.link3) metaHtml += `<div class="meta"><b>Link 3:</b> <a href="${item.link3}" target="_blank" style="color:#60a5fa;">${item.link3}</a></div>`;
-  if (item.phone_number) metaHtml += `<div class="meta"><b>Phone:</b> ${item.phone_number}</div>`;
 
   metaHtml += `
     <div class="meta description">
@@ -556,10 +468,9 @@ function createCard(item) {
       <button class="share-btn" onclick="shareItem('${item.username}', '${item.identifier}')">
         ᯓ➤ Share
       </button>
-      <button class="open-btn" onclick="openViewer('${item.embedUrl}')">
-        ⛶ Open Fullscreen
+      <button class="open-btn" onclick="openViewer('${item.directUrl}')">
+        ⛶ Open Item
       </button>
-      <div class="file-count-container" data-identifier="${item.identifier}" data-username="${item.username}"></div>
     </div>
   `;
 
@@ -579,11 +490,8 @@ function renderNextBatch(){
     const card = createCard(item);
     fragment.appendChild(card);
 
-    const preview = card.querySelector(".lazy-preview");
-    if (preview) previewObserver.observe(preview);
-    
-    const fileCountContainer = card.querySelector(".file-count-container");
-    if (fileCountContainer) fileCountObserver.observe(fileCountContainer);
+    const thumbnail = card.querySelector(".lazy-thumbnail");
+    if (thumbnail) thumbnailObserver.observe(thumbnail);
   });
   grid.appendChild(fragment);
   
@@ -605,7 +513,6 @@ async function fetchAllItems(){
 
   grid.innerHTML = "";
   allItems = [];
-  playlistItems = []; // Reset playlist items
   pageIndex = 0;
 
   if (avatarSrc) {
@@ -632,7 +539,6 @@ async function fetchAllItems(){
       `https://archive.org/advancedsearch.php?q=creator:@${username}` +
       `&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=publicdate` +
       `&fl[]=mediatype&fl[]=description&fl[]=subject` +
-      `&fl[]=gmail&fl[]=link1&fl[]=link2&fl[]=link3&fl[]=phone_number` +
       `&sort[]=publicdate desc&rows=${rows}&page=${page}&output=json`;
 
     const res = await fetch(searchUrl);
