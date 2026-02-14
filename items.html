@@ -372,14 +372,6 @@ function openViewer(directUrl) {
   document.body.appendChild(overlay);
 }
 
-function closeViewer(){
-  document.body.style.overflow = "";
-  const overlay = document.querySelector(".fullscreen-overlay");
-  if (overlay) {
-    document.body.removeChild(overlay);
-  }
-}
-
 function openAvatar() {
   avatarFullscreen.src = profileAvatar.src;
   avatarOverlay.style.display = "flex";
@@ -435,7 +427,6 @@ function processDoc(doc, username){
     tags: (doc.subject || []).toString(),
     mediaType: doc.mediatype || "unknown",
     directUrl: `https://archive.org/details/${doc.identifier}`,
-    reviewUrl: `https://archive.org/details/${doc.identifier}#reviews`,
     username: username,
     thumbnailUrl: getArchiveThumbnail(doc.identifier)
   };
@@ -460,9 +451,6 @@ function createCard(item) {
     <div class="meta description">
       <b>Description:</b><br>
       ${item.desc}
-    </div>
-    <div class="meta">
-      <a href="${item.reviewUrl}" target="_blank" style="color:#60a5fa;">Reviews</a>
     </div>
     <div style="display: flex; gap: 0.5rem; align-items: center;">
       <button class="share-btn" onclick="shareItem('${item.username}', '${item.identifier}')">
